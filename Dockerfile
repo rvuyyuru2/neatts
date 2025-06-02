@@ -1,15 +1,23 @@
-# Stage 1: Build dependencies
-FROM nvidia/cuda:12.8.1-devel-ubuntu22.04 AS builder
+# Use an official NVIDIA base image with CUDA support
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 
+# Set label for the docker image description
+LABEL description="Docker image for Instavoice"
+
+
+# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libsndfile1 \
     ffmpeg \
     python3 \
+    make\
+    g++ \
     python3-pip \
     python3-dev \
     git \
@@ -18,40 +26,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Set up working directory
 WORKDIR /app
+ENV CUDA_LAUNCH_BLOCKING=1
 
+# Copy requirements first to leverage Docker cache
 COPY requirements.txt .
-RUN CXXFLAGS="-std=c++17" pip3 install --no-cache-dir -r requirements.txt
-
-# Stage 2: Runtime image
-FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04
-
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-# Install only runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libsndfile1 \
-    ffmpeg \
-    python3 \
-    python3-pip \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# Copy installed Python packages from the builder stage
-COPY --from=builder /usr/local/lib/python3.10/dist-packages /usr/local/lib/python3.10/dist-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
 COPY . .
 
 # Create required directories for the application
-RUN mkdir -p model_cache reference_audio outputs voices logs
-
-# Expose the port the application will run on (default from config, e.g., 8004)
-EXPOSE 8004
+RUN mkdir -p model_cache reference_audio outputs voices logs \
+    # Expose the port the application will run on (default from config, e.g., 8004)
+    EXPOSE 8004
 
 # Command to run the application
 CMD ["python3", "server.py"]

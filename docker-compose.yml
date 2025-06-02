@@ -1,7 +1,20 @@
 version: '3.8'
 
 services:
-  chatterbox-tts-server:
+
+  apiserver:
+    image: nginx:alpine
+    container_name: webserver
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - tts-server
+
+  tts-server:
     build:
       context: .
       dockerfile: Dockerfile
@@ -16,6 +29,13 @@ services:
       - ./reference_audio:/app/reference_audio
       - ./outputs:/app/outputs
       - ./logs:/app/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["0"]
+              capabilities: [gpu]
 
     # --- GPU Access ---
     # Modern method (Recommended for newer Docker/NVIDIA setups)
@@ -44,5 +64,5 @@ services:
       - HF_HUB_ENABLE_HF_TRANSFER=1
       # Make NVIDIA GPUs visible and specify capabilities for PyTorch
       # These might not be necessary if you're not using NVIDIA GPUs
-      # - NVIDIA_VISIBLE_DEVICES=all
-      # - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
