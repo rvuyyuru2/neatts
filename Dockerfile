@@ -1,9 +1,4 @@
-# Use an official NVIDIA base image with CUDA support
-FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
-
-# Set label for the docker image description
-LABEL description="Docker image for Instavoice"
-
+FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -16,25 +11,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     ffmpeg \
     python3 \
-    make\
-    g++ \
     python3-pip \
     python3-dev \
     git \
-    pkg-config \
-    protobuf-compiler \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# =1
+# Set up working directory
+WORKDIR /app
 
 # Copy requirements first to leverage Docker cache
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requiremprof the application code
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application code
 COPY . .
 
 # Create required directories for the application
-RUN mkdir -p model_cache refers logs \
+RUN mkdir -p model_cache reference_audio outputs voices logs \
+
     # Expose the port the application will run on (default from config, e.g., 8004)
     EXPOSE 8004
 
