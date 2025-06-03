@@ -9,7 +9,7 @@ import logging
 import logging.handlers  # For RotatingFileHandler
 import shutil
 import time
-import uuid
+# import uuid
 import yaml  # For loading presets
 import numpy as np
 import librosa  # For potential direct use if needed, though utils.py handles most
@@ -902,7 +902,7 @@ async def custom_tts_endpoint(
     )
 
 @app.post("/v1/audio/speech", tags=["OpenAI Compatible"])
-async def openai_speech_endpoint(request: OpenAISpeechRequest):
+async def openai_speech_endpoint(request: OpenAISpeechRequest, background_tasks: BackgroundTasks):
     # Determine the audio prompt path based on the voice parameter
     predefined_voices_path = get_predefined_voices_path(ensure_absolute=True)
     reference_audio_path = get_reference_audio_path(ensure_absolute=True)
@@ -919,55 +919,29 @@ async def openai_speech_endpoint(request: OpenAISpeechRequest):
     # Check if the TTS model is loaded
     if not engine.MODEL_LOADED:
         raise HTTPException(status_code=503, detail="TTS engine model is not currently loaded or available.")
-
-    try:
-        # Use the provided seed or the default
-        seed_to_use = request.seed if request.seed is not None else get_gen_default_seed()
-
-        # Synthesize the audio
-        audio_tensor, sr = engine.synthesize(
-            text=request.input_,
-            audio_prompt_path=str(audio_prompt_path),
-            temperature=get_gen_default_temperature(),
-            exaggeration=get_gen_default_exaggeration(),
-            cfg_weight=get_gen_default_cfg_weight(),
-            seed=seed_to_use,
-        )
-
-        if audio_tensor is None or sr is None:
-            raise HTTPException(status_code=500, detail="TTS engine failed to synthesize audio.")
-
-        # Apply speed factor if not 1.0
-        if request.speed != 1.0:
-            audio_tensor, _ = utils.apply_speed_factor(audio_tensor, sr, request.speed)
-
-        # Convert tensor to numpy array
-        audio_np = audio_tensor.cpu().numpy()
-
-        # Ensure it's 1D
-        if audio_np.ndim == 2:
-            audio_np = audio_np.squeeze()
-
-        # Encode the audio to the requested format
-        encoded_audio = utils.encode_audio(
-            audio_array=audio_np,
-            sample_rate=sr,
-            output_format=request.response_format,
-            target_sample_rate=get_audio_sample_rate(),
-        )
-
-        if encoded_audio is None:
-            raise HTTPException(status_code=500, detail="Failed to encode audio.")
-
-        # Determine the media type
-        media_type = f"audio/{request.response_format}"
-
-        # Return the streaming response
-        return StreamingResponse(io.BytesIO(encoded_audio), media_type=media_type)
-
-    except Exception as e:
-        logger.error(f"Error in openai_speech_endpoint: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    
+    # Create a response queue for streaming
+    response_queue = asyncio.Queue()
+    
+    # Add the audio generation task to background tasks
+    background_tasks.add_task(
+        process_audio_generation,
+        text=request.input_,
+        audio_prompt_path=str(audio_prompt_path),
+        temperature=get_gen_default_temperature(),
+        exaggeration=get_gen_default_exaggeration(),
+        cfg_weight=get_gen_default_cfg_weight(),
+        seed=request.seed if request.seed is not None else get_gen_default_seed(),
+        speed=request.speed,
+        output_format=request.response_format,
+        response_queue=response_queue
+    )
+    
+    # Return a streaming response
+    return StreamingResponse(
+        stream_audio_response(response_queue),
+        media_type=f"audio/{request.response_format}"
+    )
 
 
 # --- Main Execution ---
@@ -991,3 +965,87 @@ if __name__ == "__main__":
         workers=1,
         reload=False,
     )
+
+
+import asyncio  # Add this import at the top of the file
+
+async def process_audio_generation(
+    text: str,
+    audio_prompt_path: str,
+    temperature: float,
+    exaggeration: float,
+    cfg_weight: float,
+    seed: int,
+    speed: float,
+    output_format: str,
+    response_queue: asyncio.Queue
+):
+    """Process audio generation in the background and put the result in the queue."""
+    try:
+        # Synthesize the audio
+        audio_tensor, sr = engine.synthesize(
+            text=text,
+            audio_prompt_path=audio_prompt_path,
+            temperature=temperature,
+            exaggeration=exaggeration,
+            cfg_weight=cfg_weight,
+            seed=seed,
+        )
+
+        if audio_tensor is None or sr is None:
+            await response_queue.put({"error": "TTS engine failed to synthesize audio."})
+            return
+
+        # Apply speed factor if not 1.0
+        if speed != 1.0:
+            audio_tensor, _ = utils.apply_speed_factor(audio_tensor, sr, speed)
+
+        # Convert tensor to numpy array
+        audio_np = audio_tensor.cpu().numpy()
+
+        # Ensure it's 1D
+        if audio_np.ndim == 2:
+            audio_np = audio_np.squeeze()
+
+        # Encode the audio to the requested format
+        encoded_audio = utils.encode_audio(
+            audio_array=audio_np,
+            sample_rate=sr,
+            output_format=output_format,
+            target_sample_rate=get_audio_sample_rate(),
+        )
+
+        if encoded_audio is None:
+            await response_queue.put({"error": "Failed to encode audio."})
+            return
+
+        # Put the encoded audio in the queue
+        await response_queue.put({"audio": encoded_audio})
+    except Exception as e:
+        logger.error(f"Error in process_audio_generation: {e}", exc_info=True)
+        await response_queue.put({"error": str(e)})
+    finally:
+        # Signal that processing is complete
+        await response_queue.put(None)
+
+async def stream_audio_response(response_queue: asyncio.Queue):
+    """Stream the audio response from the queue."""
+    try:
+        while True:
+            # Wait for data from the queue
+            data = await response_queue.get()
+            
+            # If None is received, processing is complete
+            if data is None:
+                break
+                
+            # If there's an error, raise an exception
+            if "error" in data:
+                raise Exception(data["error"])
+                
+            # If there's audio data, yield it
+            if "audio" in data:
+                yield data["audio"]
+    except Exception as e:
+        logger.error(f"Error in stream_audio_response: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

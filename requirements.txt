@@ -1,6 +1,5 @@
 # requirements.txt
-
-chatterbox-tts
+chatterbox-tts:https://github.com/davidbrowne17/chatterbox-streaming.git
 
 # Core Web Framework
 fastapi
@@ -14,8 +13,6 @@ soundfile # Requires libsndfile system library (e.g., sudo apt-get install libsn
 huggingface_hub
 descript-audio-codec
 safetensors
-onnxruntime
-
 # Configuration & Utilities
 pydantic
 python-dotenv # Used ONLY for initial config seeding if config.yaml missing
