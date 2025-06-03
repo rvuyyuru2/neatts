@@ -29,9 +29,10 @@ COPY . .
 
 # Create required directories for the application
 RUN mkdir -p model_cache reference_audio outputs voices logs \
+    && chmod -R 777 model_cache reference_audio outputs voices logs
 
-    # Expose the port the application will run on (default from config, e.g., 8004)
-    EXPOSE 8004
+# Expose the port the application will run on (default from config, e.g., 8004)
+EXPOSE 8004
 
 # Command to run the application
 CMD ["python3", "server.py"]
