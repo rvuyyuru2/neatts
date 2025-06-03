@@ -1,6 +1,7 @@
 # requirements.txt
-# chatterbox-tts:https://github.com/davidbrowne17/chatterbox-streaming.git
-git+https://github.com/davidbrowne17/chatterbox-streaming.git
+chatterbox-tts
+# :https://github.com/davidbrowne17/chatterbox-streaming.git
+# git+https://github.com/davidbrowne17/chatterbox-streaming.git
 # Core Web Framework
 fastapi
 uvicorn[standard]

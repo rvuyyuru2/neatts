@@ -337,10 +337,10 @@ def encode_audio(
             audio_clipped = np.clip(audio_array, -1.0, 1.0)
             audio_int16 = (audio_clipped * 32767).astype(np.int16)
             audio_segment = AudioSegment(
-            audio_int16.tobytes(),
-            frame_rate=sample_rate,
-            sample_width=2,
-            channels=1,
+                audio_int16.tobytes(),
+                frame_rate=sample_rate,
+                sample_width=2,
+                channels=1,
             )
             audio_segment.export(output_buffer, format="mp3")
 
