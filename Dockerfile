@@ -37,7 +37,8 @@ RUN useradd -m appuser
 
 # Create required directories for the application and set ownership
 RUN mkdir -p model_cache reference_audio outputs voices logs && \
-    chown -R appuser:appuser model_cache reference_audio outputs voices logs
+    chown -R appuser:appuser model_cache reference_audio outputs voices logs && \
+    chmod -R 755 logs
 
 USER appuser
 
@@ -47,6 +48,7 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
 COPY --chown=appuser:appuser . .
+RUN chmod -R 755 /app
 
 # Expose the port the application will run on (default from config, e.g., 8004)
 EXPOSE 8004
