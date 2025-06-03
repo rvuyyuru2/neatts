@@ -34,6 +34,7 @@ USER appuser
 # Set up working directory
 WORKDIR /app
 ENV CUDA_LAUNCH_BLOCKING=1
+ENV PATH="/home/appuser/.local/bin:$PATH"
 
 # Copy requirements first to leverage Docker cache
 COPY --chown=appuser:appuser requirements.txt .
