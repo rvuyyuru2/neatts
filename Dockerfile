@@ -27,14 +27,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user
-RUN useradd -m appuser
-USER appuser
-
 # Set up working directory
 WORKDIR /app
 ENV CUDA_LAUNCH_BLOCKING=1
 ENV PATH="/home/appuser/.local/bin:$PATH"
+
+# Create a non-root user
+RUN useradd -m appuser
+
+# Create required directories for the application and set ownership
+RUN mkdir -p model_cache reference_audio outputs voices logs && \
+    chown -R appuser:appuser model_cache reference_audio outputs voices logs
+
+USER appuser
 
 # Copy requirements first to leverage Docker cache
 COPY --chown=appuser:appuser requirements.txt .
@@ -42,10 +47,6 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
 COPY --chown=appuser:appuser . .
-
-# Create required directories for the application
-RUN mkdir -p model_cache reference_audio outputs voices logs && \
-    chown -R appuser:appuser model_cache reference_audio outputs voices logs
 
 # Expose the port the application will run on (default from config, e.g., 8004)
 EXPOSE 8004
